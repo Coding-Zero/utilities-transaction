@@ -22,7 +22,7 @@ public class TransactionManagerImpl implements TransactionManager {
     public void register(String name, TransactionalService service) {
         checkForInvalidServiceNameFormat(name);
         services.put(name.toLowerCase(), service);
-        service.doRegister(name, context);
+        service.onRegister(name, context);
     }
 
     private void checkForInvalidServiceNameFormat(String name) {
@@ -43,14 +43,14 @@ public class TransactionManagerImpl implements TransactionManager {
     @Override
     public void startTransaction() {
         for (TransactionalService service: services.values()) {
-            service.doStartTransaction(context);
+            service.onStartTransaction(context);
         }
     }
 
     @Override
     public void commit() {
         for (TransactionalService service: services.values()) {
-            service.doCommit(context);
+            service.onCommitTransaction(context);
         }
         this.context = null;
     }
@@ -58,7 +58,7 @@ public class TransactionManagerImpl implements TransactionManager {
     @Override
     public void rollback() {
         for (TransactionalService service: services.values()) {
-            service.doRollback(context);
+            service.onRollbackTransaction(context);
         }
         this.context = null;
     }

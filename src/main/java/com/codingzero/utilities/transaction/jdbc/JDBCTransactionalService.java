@@ -167,7 +167,7 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     }
 
     @Override
-    public void doRegister(String name, TransactionContext context) {
+    public void onRegister(String name, TransactionContext context) {
         checkForNullContext(context);
         initSameServiceTransactionCount(context);
     }
@@ -186,7 +186,7 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     }
 
     @Override
-    public void doStartTransaction(TransactionContext context) {
+    public void onStartTransaction(TransactionContext context) {
         checkForNullContext(context);
         checkForLocalTransactionStarted();
         markGlobalTransactionStarted(context);
@@ -195,7 +195,7 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     }
 
     @Override
-    public void doCommit(TransactionContext context) {
+    public void onCommitTransaction(TransactionContext context) {
         checkForNullContext(context);
         checkForGlobalTransactionNotStarted();
         TransactionHelper helper = getGlobalTransactionHelper();
@@ -216,7 +216,7 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     }
 
     @Override
-    public void doRollback(TransactionContext context) {
+    public void onRollbackTransaction(TransactionContext context) {
         checkForNullContext(context);
         checkForGlobalTransactionNotStarted();
         TransactionHelper helper = getGlobalTransactionHelper();
