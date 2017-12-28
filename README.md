@@ -17,7 +17,15 @@ public class StudentDAOImpl extends JDBCTransactionalService implements StudentD
     
     public void insert(Student student) {
         Connection conn = getConnection();
-        //insert student table
+        PreparedStatement stmt = null;
+        try {
+            //insert student
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } finally {
+            closePreparedStatement(stmt);
+            closeConnection(conn);
+        }
     }    
     
 }
