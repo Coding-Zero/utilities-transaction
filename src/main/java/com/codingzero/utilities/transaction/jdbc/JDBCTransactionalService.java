@@ -1,5 +1,6 @@
 package com.codingzero.utilities.transaction.jdbc;
 
+import com.codingzero.utilities.transaction.Transaction;
 import com.codingzero.utilities.transaction.TransactionContext;
 import com.codingzero.utilities.transaction.TransactionalService;
 
@@ -9,16 +10,16 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public abstract class JDBCTransactionalService implements TransactionalService {
+public abstract class JDBCTransactionalService implements TransactionalService, Transaction {
 
     private static final String TRANSACTION_HELPER = "TRANSACTION_HELPER_" + new Object().hashCode();
 
     private DataSource dataSource;
     private TransactionHelperProvider helperProvider;
     private boolean isLocalTransactionStarted;
-    private TransactionHelper localTransactionHelper;
+    private TransactionHelper localTransactionHelper; //instance wide
     private TransactionHelper globalTransactionHelper;
-    private TransactionCount sameServiceTransactionCount;
+    private TransactionCount serviceTransactionCount; //class wide
 
     public JDBCTransactionalService(DataSource dataSource) {
         this(dataSource, new TransactionHelperProvider());
@@ -143,25 +144,28 @@ public abstract class JDBCTransactionalService implements TransactionalService {
         }
     }
 
-    protected void startLocalTransaction() {
+    @Override
+    public void start() {
         markLocalTransactionStarted();
         getLocalTransactionHelper().startTransaction();
-        getSameServiceTransactionCount().start();
+        getServiceTransactionCount().start();
     }
 
-    protected void commitLocalTransaction() {
+    @Override
+    public void commit() {
         checkForLocalTransactionNotStarted();
         getLocalTransactionHelper().commit();
-        getSameServiceTransactionCount().commit();
+        getServiceTransactionCount().commit();
         if (!getLocalTransactionHelper().isTransactionStarted()) {
             cleanLocalTransactionStartedMark();
         }
     }
 
-    protected void rollbackLocalTransaction() {
+    @Override
+    public void rollback() {
         checkForLocalTransactionNotStarted();
         getLocalTransactionHelper().rollback();
-        getSameServiceTransactionCount().rollback();
+        getServiceTransactionCount().rollback();
         if (!getLocalTransactionHelper().isTransactionStarted()) {
             cleanLocalTransactionStartedMark();
         }
@@ -170,20 +174,20 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     @Override
     public void onRegister(String name, TransactionContext context) {
         checkForNullContext(context);
-        initSameServiceTransactionCount(context);
+        setServiceTransactionCountProperty(context);
     }
 
-    private void initSameServiceTransactionCount(TransactionContext context) {
+    private void setServiceTransactionCountProperty(TransactionContext context) {
         String propertyKey = getClass().getCanonicalName();
-        sameServiceTransactionCount = (TransactionCount) context.getProperty(propertyKey);
-        if (null == sameServiceTransactionCount) {
-            sameServiceTransactionCount = new TransactionCount();
-            context.setProperty(propertyKey, sameServiceTransactionCount);
+        serviceTransactionCount = (TransactionCount) context.getProperty(propertyKey);
+        if (null == serviceTransactionCount) {
+            serviceTransactionCount = new TransactionCount();
+            context.setProperty(propertyKey, serviceTransactionCount);
         }
     }
 
-    private TransactionCount getSameServiceTransactionCount() {
-        return sameServiceTransactionCount;
+    private TransactionCount getServiceTransactionCount() {
+        return serviceTransactionCount;
     }
 
     @Override
@@ -199,19 +203,25 @@ public abstract class JDBCTransactionalService implements TransactionalService {
         checkForNullContext(context);
         checkForGlobalTransactionNotStarted();
         getGlobalTransactionHelper().commit();
-        checkForUnmatchLocalTransactionCalls();
+        checkForMismatchLocalTransactionCalls();
         if (!getGlobalTransactionHelper().isTransactionStarted()) {
             cleanGlobalTransactionHelper(context);
         }
         cleanGlobalTransactionStartedMark();
     }
 
-    private void checkForUnmatchLocalTransactionCalls() {
-        if (!getSameServiceTransactionCount().isLastCall()
+    /**
+     * This is used to ensure each start() has one commit() or rollback() get called after for each instance.
+     *
+     * service class wide transaction count is used to avoid the mis-calculation
+     * happen when the same class got registered more than once.
+     */
+    private void checkForMismatchLocalTransactionCalls() {
+        if (!getServiceTransactionCount().isLastCall()
                 && isLocalTransactionStarted()) {
             throw new IllegalStateException("Local transaction is not handled properly. "
-                    + "Ensure commitLocalTransaction() or rollbackLocalTransaction() get invoked "
-                    + "for each startLocalTransaction() call.");
+                    + "Ensure commit() or rollback() get invoked "
+                    + "for each start() call.");
         }
     }
 

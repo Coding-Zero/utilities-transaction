@@ -1,4 +1,4 @@
-package com.codingzero.utilities.transaction.impl;
+package com.codingzero.utilities.transaction.manager;
 
 import com.codingzero.utilities.transaction.TransactionContext;
 import com.codingzero.utilities.transaction.TransactionManager;
@@ -48,7 +48,7 @@ public class TransactionManagerImpl implements TransactionManager {
     }
 
     @Override
-    public void startTransaction() {
+    public void start() {
         for (TransactionalService service: services.values()) {
             service.onStartTransaction(getContext());
         }
