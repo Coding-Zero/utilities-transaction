@@ -15,14 +15,21 @@ public class TransactionManagerImpl implements TransactionManager {
 
     public TransactionManagerImpl() {
         this.services = new LinkedHashMap<>();
-        this.context = new TransactionContextImpl();
+        this.context = null;
+    }
+
+    private TransactionContext getContext() {
+        if (null == context) {
+            context = new TransactionContextImpl();
+        }
+        return context;
     }
 
     @Override
     public void register(String name, TransactionalService service) {
         checkForInvalidServiceNameFormat(name);
         services.put(name.toLowerCase(), service);
-        service.onRegister(name, context);
+        service.onRegister(name, getContext());
     }
 
     private void checkForInvalidServiceNameFormat(String name) {
@@ -43,14 +50,14 @@ public class TransactionManagerImpl implements TransactionManager {
     @Override
     public void startTransaction() {
         for (TransactionalService service: services.values()) {
-            service.onStartTransaction(context);
+            service.onStartTransaction(getContext());
         }
     }
 
     @Override
     public void commit() {
         for (TransactionalService service: services.values()) {
-            service.onCommitTransaction(context);
+            service.onCommitTransaction(getContext());
         }
         this.context = null;
     }
@@ -58,7 +65,7 @@ public class TransactionManagerImpl implements TransactionManager {
     @Override
     public void rollback() {
         for (TransactionalService service: services.values()) {
-            service.onRollbackTransaction(context);
+            service.onRollbackTransaction(getContext());
         }
         this.context = null;
     }

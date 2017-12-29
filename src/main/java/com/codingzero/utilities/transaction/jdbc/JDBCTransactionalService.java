@@ -15,7 +15,6 @@ public abstract class JDBCTransactionalService implements TransactionalService {
 
     private DataSource dataSource;
     private TransactionHelperProvider helperProvider;
-    private boolean isGlobalTransactionStarted;
     private boolean isLocalTransactionStarted;
     private TransactionHelper localTransactionHelper;
     private TransactionHelper globalTransactionHelper;
@@ -40,14 +39,16 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     }
 
     private boolean isGlobalTransactionStarted() {
-        return isGlobalTransactionStarted;
+        if (null == getGlobalTransactionHelper()) {
+            return false;
+        }
+        return globalTransactionHelper.isTransactionStarted();
     }
 
     private void markGlobalTransactionStarted(TransactionContext context) {
         if (isGlobalTransactionStarted()) {
             throw new IllegalStateException("Global transaction already started");
         }
-        isGlobalTransactionStarted = true;
         globalTransactionHelper =
                 (TransactionHelper) context.getProperty(TRANSACTION_HELPER);
         if (null == globalTransactionHelper) {
@@ -57,8 +58,11 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     }
 
     private void cleanGlobalTransactionStartedMark() {
-        isGlobalTransactionStarted = false;
         globalTransactionHelper = null;
+    }
+
+    private void cleanGlobalTransactionHelper(TransactionContext context) {
+        context.removeProperty(TRANSACTION_HELPER);
     }
 
     private TransactionHelper getGlobalTransactionHelper() {
@@ -141,27 +145,24 @@ public abstract class JDBCTransactionalService implements TransactionalService {
 
     protected void startLocalTransaction() {
         markLocalTransactionStarted();
-        TransactionHelper helper = getLocalTransactionHelper();
-        helper.startTransaction();
+        getLocalTransactionHelper().startTransaction();
         getSameServiceTransactionCount().start();
     }
 
     protected void commitLocalTransaction() {
         checkForLocalTransactionNotStarted();
-        TransactionHelper helper = getLocalTransactionHelper();
-        helper.commit();
+        getLocalTransactionHelper().commit();
         getSameServiceTransactionCount().commit();
-        if (!helper.isTransactionStarted()) {
+        if (!getLocalTransactionHelper().isTransactionStarted()) {
             cleanLocalTransactionStartedMark();
         }
     }
 
     protected void rollbackLocalTransaction() {
         checkForLocalTransactionNotStarted();
-        TransactionHelper helper = getLocalTransactionHelper();
-        helper.rollback();
+        getLocalTransactionHelper().rollback();
         getSameServiceTransactionCount().rollback();
-        if (!helper.isTransactionStarted()) {
+        if (!getLocalTransactionHelper().isTransactionStarted()) {
             cleanLocalTransactionStartedMark();
         }
     }
@@ -190,20 +191,19 @@ public abstract class JDBCTransactionalService implements TransactionalService {
         checkForNullContext(context);
         checkForLocalTransactionStarted();
         markGlobalTransactionStarted(context);
-        TransactionHelper helper = getGlobalTransactionHelper();
-        helper.startTransaction();
+        getGlobalTransactionHelper().startTransaction();
     }
 
     @Override
     public void onCommitTransaction(TransactionContext context) {
         checkForNullContext(context);
         checkForGlobalTransactionNotStarted();
-        TransactionHelper helper = getGlobalTransactionHelper();
-        helper.commit();
+        getGlobalTransactionHelper().commit();
         checkForUnmatchLocalTransactionCalls();
-        if (!helper.isTransactionStarted()) {
-            cleanGlobalTransactionStartedMark();
+        if (!getGlobalTransactionHelper().isTransactionStarted()) {
+            cleanGlobalTransactionHelper(context);
         }
+        cleanGlobalTransactionStartedMark();
     }
 
     private void checkForUnmatchLocalTransactionCalls() {
@@ -219,11 +219,11 @@ public abstract class JDBCTransactionalService implements TransactionalService {
     public void onRollbackTransaction(TransactionContext context) {
         checkForNullContext(context);
         checkForGlobalTransactionNotStarted();
-        TransactionHelper helper = getGlobalTransactionHelper();
-        helper.rollback();
-        if (!helper.isTransactionStarted()) {
-            cleanGlobalTransactionStartedMark();
+        getGlobalTransactionHelper().rollback();
+        if (!getGlobalTransactionHelper().isTransactionStarted()) {
+            cleanGlobalTransactionHelper(context);
         }
+        cleanGlobalTransactionStartedMark();
     }
 
     private void checkForNullContext(TransactionContext context) {
