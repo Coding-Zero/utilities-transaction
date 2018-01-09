@@ -16,7 +16,6 @@ public abstract class JDBCTransactionalService implements TransactionalService, 
 
     private DataSource dataSource;
     private TransactionHelperProvider helperProvider;
-    private boolean isLocalTransactionStarted;
     private TransactionHelper localTransactionHelper; //instance wide
     private TransactionHelper globalTransactionHelper;
     private TransactionCount serviceTransactionCount; //class wide
@@ -71,23 +70,17 @@ public abstract class JDBCTransactionalService implements TransactionalService, 
     }
 
     private boolean isLocalTransactionStarted() {
-        return isLocalTransactionStarted;
+        return null != localTransactionHelper;
     }
 
     private void markLocalTransactionStarted() {
         if (isLocalTransactionStarted()) {
             return;
         }
-        isLocalTransactionStarted = true;
-        if (isGlobalTransactionStarted()) {
-            localTransactionHelper = getGlobalTransactionHelper();
-        } else {
-            localTransactionHelper = getHelperProvider().get(getDataSource());
-        }
+        localTransactionHelper = getHelperProvider().get(getDataSource());
     }
 
     private void cleanLocalTransactionStartedMark() {
-        isLocalTransactionStarted = false;
         localTransactionHelper = null;
     }
 

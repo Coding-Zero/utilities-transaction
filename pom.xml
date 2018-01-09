@@ -6,7 +6,7 @@
 
     <groupId>com.codingzero.utilities</groupId>
     <artifactId>utilities-transaction</artifactId>
-    <version>0.2.0</version>
+    <version>0.2.1</version>
 
     <licenses>
         <license>
@@ -21,6 +21,12 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
             <version>6.0.4</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
