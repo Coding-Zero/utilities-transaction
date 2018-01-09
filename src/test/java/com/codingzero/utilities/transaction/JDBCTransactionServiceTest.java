@@ -1,32 +1,23 @@
 package com.codingzero.utilities.transaction;
 
-import com.codingzero.utilities.transaction.manager.TransactionManagerImpl;
 import com.codingzero.utilities.transaction.jdbc.JDBCTransactionalService;
 import com.codingzero.utilities.transaction.jdbc.TransactionHelperProvider;
+import com.codingzero.utilities.transaction.manager.TransactionManagerImpl;
 import com.mysql.cj.jdbc.MysqlDataSource;
-import com.mysql.cj.jdbc.exceptions.MysqlDataTruncation;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
-import static com.sun.org.apache.xerces.internal.util.PropertyState.is;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 
 
 public class JDBCTransactionServiceTest {
