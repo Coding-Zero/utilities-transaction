@@ -141,16 +141,28 @@ public abstract class JDBCTransactionalService implements TransactionalService, 
     public void start() {
         markLocalTransactionStarted();
         getLocalTransactionHelper().startTransaction();
-        getServiceTransactionCount().start();
+        startServiceTransaction();
+    }
+
+    private void startServiceTransaction() {
+        if (null != getServiceTransactionCount()) {
+            getServiceTransactionCount().start();
+        }
     }
 
     @Override
     public void commit() {
         checkForLocalTransactionNotStarted();
         getLocalTransactionHelper().commit();
-        getServiceTransactionCount().commit();
+        commitServiceTransaction();
         if (!getLocalTransactionHelper().isTransactionStarted()) {
             cleanLocalTransactionStartedMark();
+        }
+    }
+
+    private void commitServiceTransaction() {
+        if (null != getServiceTransactionCount()) {
+            getServiceTransactionCount().commit();
         }
     }
 
@@ -158,9 +170,15 @@ public abstract class JDBCTransactionalService implements TransactionalService, 
     public void rollback() {
         checkForLocalTransactionNotStarted();
         getLocalTransactionHelper().rollback();
-        getServiceTransactionCount().rollback();
+        rollbackServiceTransaction();
         if (!getLocalTransactionHelper().isTransactionStarted()) {
             cleanLocalTransactionStartedMark();
+        }
+    }
+
+    private void rollbackServiceTransaction() {
+        if (null != getServiceTransactionCount()) {
+            getServiceTransactionCount().rollback();
         }
     }
 
