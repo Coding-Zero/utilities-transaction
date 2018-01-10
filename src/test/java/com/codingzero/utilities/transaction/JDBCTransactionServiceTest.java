@@ -40,6 +40,11 @@ public class JDBCTransactionServiceTest {
     @Before
     public void setUp() throws SQLException {
         dataSource = getMySQLDataSource();
+        try {
+            runScript(dataSource, DROP_SCHEMA);
+        } catch (RuntimeException e) {
+            //nothing
+        }
         runScript(dataSource, CREATE_SCHEMA);
         runScript(dataSource, CREATE_TABLE);
     }
@@ -73,6 +78,79 @@ public class JDBCTransactionServiceTest {
         }
     }
 
+    private void assertNumberOfRows(int rows) {
+        TestAccess access = new TestAccess(dataSource, new TransactionHelperProvider());
+        assertEquals(rows, access.count());
+    }
+
+    @Test
+    public void testNoTransactionInserts() {
+        TransactionHelperProvider provider = new TransactionHelperProvider();
+        TestAccess access = new TestAccess(dataSource, provider);
+        String date = new Date().toString();
+        access.insert(date);
+        assertNumberOfRows(1);
+        access.insert(date);
+        assertNumberOfRows(2);
+        access.insert(date);
+        assertNumberOfRows(3);
+        assertEquals(date, access.selectById(1));
+        assertEquals(date, access.selectById(2));
+        assertEquals(date, access.selectById(3));
+    }
+
+    @Test
+    public void testNoTransactionInserts_Rollback() {
+        TransactionHelperProvider provider = new TransactionHelperProvider();
+        TestAccess access = new TestAccess(dataSource, provider);
+        String date = new Date().toString();
+        try {
+            access.insert(date);
+            assertNumberOfRows(1);
+            access.insert(date);
+            assertNumberOfRows(2);
+            access.insert(date + "_oversize_string");
+        } catch (RuntimeException | AssertionError e) {
+            assertNumberOfRows(2);
+        }
+        assertEquals(date, access.selectById(1));
+        assertEquals(date, access.selectById(2));
+    }
+
+    @Test
+    public void testSingleTransactionInserts() {
+        TransactionHelperProvider provider = new TransactionHelperProvider();
+        TestAccess access = new TestAccess(dataSource, provider);
+        String date = new Date().toString();
+        access.insertWithTransaction(date);
+        assertNumberOfRows(1);
+        access.insertWithTransaction(date);
+        assertNumberOfRows(2);
+        access.insertWithTransaction(date);
+        assertNumberOfRows(3);
+        assertEquals(date, access.selectById(1));
+        assertEquals(date, access.selectById(2));
+        assertEquals(date, access.selectById(3));
+    }
+
+    @Test
+    public void testSingleTransactionInserts_Rollback() {
+        TransactionHelperProvider provider = new TransactionHelperProvider();
+        TestAccess access = new TestAccess(dataSource, provider);
+        String date = new Date().toString();
+        try {
+            access.insertWithTransaction(date);
+            assertNumberOfRows(1);
+            access.insertWithTransaction(date);
+            assertNumberOfRows(2);
+            access.insertWithTransaction(date + "_oversize_string");
+        } catch (RuntimeException | AssertionError e) {
+            assertNumberOfRows(2);
+        }
+        assertEquals(date, access.selectById(1));
+        assertEquals(date, access.selectById(2));
+    }
+
     @Test
     public void testSingleInsert_NoLocalTransaction() {
         TransactionManager manager = new TransactionManagerImpl();
@@ -84,13 +162,13 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
-        String value = access.selectById(1);
-        assertEquals(date, value);
+        assertNumberOfRows(1);
+        assertEquals(date, access.selectById(1));
     }
 
     @Test
@@ -105,10 +183,10 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access.count());
+        assertNumberOfRows(0);
         String value = access.selectById(1);
         assertEquals(null, value);
     }
@@ -124,11 +202,12 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         String value = access.selectById(1);
         assertEquals(date, value);
     }
@@ -145,10 +224,10 @@ public class JDBCTransactionServiceTest {
         try {
             access.insertWithTransaction(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access.count());
+        assertNumberOfRows(0);
         String value = access.selectById(1);
         assertEquals(null, value);
     }
@@ -164,23 +243,21 @@ public class JDBCTransactionServiceTest {
         manager.register("access2", access2);
         manager.register("access3", access3);
 
-        long currentTimestamp = new Date().getTime();
-        String date1 = new Date(currentTimestamp).toString();
-        String date2 = new Date(currentTimestamp + 1000).toString();
-        String date3 = new Date(currentTimestamp + 2000).toString();
+        String date = new Date().toString();
         manager.start();
         try {
-            access1.insert(date1);
-            access2.insert(date2);
-            access3.insert(date3);
+            access1.insert(date);
+            access2.insert(date);
+            access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(3, access1.count());
-        assertEquals(date1, access1.selectById(1));
-        assertEquals(date2, access1.selectById(2));
-        assertEquals(date3, access1.selectById(3));
+        assertNumberOfRows(3);
+        assertEquals(date, access1.selectById(1));
+        assertEquals(date, access1.selectById(2));
+        assertEquals(date, access1.selectById(3));
     }
 
     @Test
@@ -194,20 +271,18 @@ public class JDBCTransactionServiceTest {
         manager.register("access2", access2);
         manager.register("access3", access3);
 
-        long currentTimestamp = new Date().getTime();
-        String date1 = new Date(currentTimestamp).toString();
-        String date2 = new Date(currentTimestamp + 1000).toString();
-        String date3 = new Date(currentTimestamp + 2000).toString();
+        String date = new Date().toString();
         manager.start();
         try {
-            access1.insert(date1);
-            access2.insert(date2 + "_oversize_string");
-            access3.insert(date3);
+            access1.insert(date);
+            assertNumberOfRows(0);
+            access2.insert(date + "_oversize_string");
+            access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -221,23 +296,21 @@ public class JDBCTransactionServiceTest {
         manager.register("access2", access2);
         manager.register("access3", access3);
 
-        long currentTimestamp = new Date().getTime();
-        String date1 = new Date(currentTimestamp).toString();
-        String date2 = new Date(currentTimestamp + 1000).toString();
-        String date3 = new Date(currentTimestamp + 2000).toString();
+        String date = new Date().toString();
         manager.start();
         try {
-            access1.insertWithTransaction(date1);
-            access2.insertWithTransaction(date2);
-            access3.insertWithTransaction(date3);
+            access1.insertWithTransaction(date);
+            access2.insertWithTransaction(date);
+            access3.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(3, access1.count());
-        assertEquals(date1, access1.selectById(1));
-        assertEquals(date2, access1.selectById(2));
-        assertEquals(date3, access1.selectById(3));
+        assertNumberOfRows(3);
+        assertEquals(date, access1.selectById(1));
+        assertEquals(date, access1.selectById(2));
+        assertEquals(date, access1.selectById(3));
     }
 
     @Test
@@ -251,20 +324,18 @@ public class JDBCTransactionServiceTest {
         manager.register("access2", access2);
         manager.register("access3", access3);
 
-        long currentTimestamp = new Date().getTime();
-        String date1 = new Date(currentTimestamp).toString();
-        String date2 = new Date(currentTimestamp + 1000).toString();
-        String date3 = new Date(currentTimestamp + 2000).toString();
+        String date = new Date().toString();
         manager.start();
         try {
-            access1.insertWithTransaction(date1);
-            access2.insertWithTransaction(date2 + "_oversize_string");
-            access3.insertWithTransaction(date3);
+            access1.insertWithTransaction(date);
+            assertNumberOfRows(0);
+            access2.insertWithTransaction(date + "_oversize_string");
+            access3.insertWithTransaction(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -278,12 +349,13 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         access.insert(date);
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(1));
         assertEquals(date, access.selectById(2));
     }
@@ -300,11 +372,11 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         access.insert(date);
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -319,16 +391,17 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
         thrown.expect(RuntimeException.class);
         access.insert(date + "_oversize_string");
         access.insert(date);
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(2));
     }
 
@@ -343,12 +416,13 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         access.insertWithTransaction(date);
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(1));
         assertEquals(date, access.selectById(2));
     }
@@ -365,11 +439,11 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         access.insertWithTransaction(date);
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -384,16 +458,17 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
         thrown.expect(RuntimeException.class);
         access.insertWithTransaction(date + "_oversize_string");
         access.insertWithTransaction(date);
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(2));
     }
 
@@ -408,18 +483,20 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(1);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(1));
         assertEquals(date, access.selectById(2));
     }
@@ -436,17 +513,18 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -461,18 +539,19 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -488,17 +567,17 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -512,18 +591,20 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(1);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(1));
         assertEquals(date, access.selectById(2));
     }
@@ -540,17 +621,18 @@ public class JDBCTransactionServiceTest {
         try {
             access.insertWithTransaction(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -565,18 +647,19 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -592,17 +675,17 @@ public class JDBCTransactionServiceTest {
         try {
             access.insertWithTransaction(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -616,18 +699,20 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insertWithTransaction(date);
+            assertNumberOfRows(1);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(2, access.count());
+        assertNumberOfRows(2);
         assertEquals(date, access.selectById(1));
         assertEquals(date, access.selectById(2));
     }
@@ -644,17 +729,18 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -669,18 +755,19 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insertWithTransaction(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(1, access.count());
+        assertNumberOfRows(1);
         assertEquals(date, access.selectById(1));
     }
 
@@ -696,17 +783,17 @@ public class JDBCTransactionServiceTest {
         try {
             access.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
         try {
             access.insertWithTransaction(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+         } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        assertEquals(0, access.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -726,8 +813,9 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
@@ -735,14 +823,14 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(3);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(6, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(6);
+        for (int i = 1; i < 7; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -761,10 +849,11 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
         manager.start();
@@ -772,14 +861,14 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e) {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = (0 + 3); i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 2; i < 5; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -800,23 +889,24 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(3);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 1; i < 4; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -835,22 +925,24 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(1);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -870,8 +962,9 @@ public class JDBCTransactionServiceTest {
             access1.insertWithTransaction(date);
             access2.insertWithTransaction(date);
             access3.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
@@ -879,14 +972,14 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(3);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(6, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(6);
+        for (int i = 1; i < 7; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -905,10 +998,11 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insertWithTransaction(date);
+            assertNumberOfRows(0);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insertWithTransaction(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
@@ -916,14 +1010,14 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = (0 + 3); i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 2; i < 5; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -944,23 +1038,24 @@ public class JDBCTransactionServiceTest {
             access1.insertWithTransaction(date);
             access2.insertWithTransaction(date);
             access3.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(3);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 1; i < 4; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -979,22 +1074,24 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insertWithTransaction(date);
+            assertNumberOfRows(0);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insertWithTransaction(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -1014,8 +1111,9 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
@@ -1023,14 +1121,14 @@ public class JDBCTransactionServiceTest {
             access1.insertWithTransaction(date);
             access2.insertWithTransaction(date);
             access3.insertWithTransaction(date);
+            assertNumberOfRows(3);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(6, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(6);
+        for (int i = 1; i < 7; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -1049,10 +1147,11 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
@@ -1060,14 +1159,14 @@ public class JDBCTransactionServiceTest {
             access1.insertWithTransaction(date);
             access2.insertWithTransaction(date);
             access3.insertWithTransaction(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = (0 + 3); i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 2; i < 5; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -1088,23 +1187,24 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insert(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
         try {
             access1.insertWithTransaction(date);
+            assertNumberOfRows(3);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insertWithTransaction(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 1; i < 4; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -1123,22 +1223,24 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insert(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         manager.start();
         try {
             access1.insertWithTransaction(date);
+            assertNumberOfRows(0);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insertWithTransaction(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -1158,14 +1260,14 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insertWithTransaction(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        int count = access1.count();
-        assertEquals(3, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(3);
+        for (int i = 1; i < 4; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -1184,13 +1286,14 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -1209,12 +1312,13 @@ public class JDBCTransactionServiceTest {
         try {
             access1.insert(date);
             access2.insertWithTransaction(date);
+            assertNumberOfRows(0);
             access3.insert(date + "_oversize_string");
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
-        assertEquals(0, access1.count());
+        assertNumberOfRows(0);
     }
 
     @Test
@@ -1234,15 +1338,15 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insertWithTransaction(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         access1.insert(date);
-        int count = access1.count();
-        assertEquals(4, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(4);
+        for (int i = 1; i < 5; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -1261,16 +1365,16 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         access1.insert(date);
-        int count = access1.count();
-        assertEquals(1, count);
-        for (int i = (0 + 3); i < count; i ++) {
+        assertNumberOfRows(1);
+        for (int i = 1; i < 2; i ++) {
             assertEquals(date, access1.selectById(i + 1));
         }
     }
@@ -1292,15 +1396,15 @@ public class JDBCTransactionServiceTest {
             access1.insert(date);
             access2.insertWithTransaction(date);
             access3.insert(date);
+            assertNumberOfRows(0);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         access1.insertWithTransaction(date);
-        int count = access1.count();
-        assertEquals(4, count);
-        for (int i = 0; i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(4);
+        for (int i = 1; i < 5; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
@@ -1319,17 +1423,17 @@ public class JDBCTransactionServiceTest {
         manager.start();
         try {
             access1.insert(date);
+            assertNumberOfRows(0);
             access2.insertWithTransaction(date + "_oversize_string");
             access3.insert(date);
             manager.commit();
-        } catch (Exception e) {
+        } catch (Exception | AssertionError e)  {
             manager.rollback();
         }
         access1.insertWithTransaction(date);
-        int count = access1.count();
-        assertEquals(1, count);
-        for (int i = (0 + 3); i < count; i ++) {
-            assertEquals(date, access1.selectById(i + 1));
+        assertNumberOfRows(1);
+        for (int i = 2; i < 3; i ++) {
+            assertEquals(date, access1.selectById(i));
         }
     }
 
