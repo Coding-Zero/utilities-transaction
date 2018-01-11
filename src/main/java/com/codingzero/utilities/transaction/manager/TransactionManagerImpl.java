@@ -44,7 +44,7 @@ public class TransactionManagerImpl implements TransactionManager {
 
     @Override
     public TransactionalService deregister(String name) {
-        return services.remove(name);
+        return services.remove(name.toLowerCase());
     }
 
     @Override

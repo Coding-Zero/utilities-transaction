@@ -6,7 +6,7 @@
 
     <groupId>com.codingzero.utilities</groupId>
     <artifactId>utilities-transaction</artifactId>
-    <version>0.2.2</version>
+    <version>0.2.3</version>
 
     <licenses>
         <license>
@@ -26,6 +26,12 @@
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>2.13.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
