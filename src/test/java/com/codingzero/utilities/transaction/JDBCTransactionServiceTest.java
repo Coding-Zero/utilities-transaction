@@ -1453,7 +1453,6 @@ public class JDBCTransactionServiceTest {
                         "?");
                 stmt = conn.prepareStatement(sql);
                 stmt.setString(1, value);
-
                 stmt.executeUpdate();
             } catch (SQLException e) {
                 throw new RuntimeException(e);
